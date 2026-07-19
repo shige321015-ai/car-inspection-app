@@ -483,19 +483,19 @@ function renderHome(){
 }
 
 // ═══ Inspection flow ═══
-function startInspection(type){
-  current={type,states:{}};
+function startInspection(type,rec){
+  current={type,states:rec?{...rec.states}:{},editId:rec?.id||null};
   const def=INSP_DEFS[type];
-  document.getElementById('insp-name').textContent=def.name;
-  document.getElementById('insp-date').value=today();
-  document.getElementById('insp-km').value=car?.km||'';
-  document.getElementById('insp-cost').value='';
-  document.getElementById('insp-shop').value='';
-  document.getElementById('insp-note').value='';
+  document.getElementById('insp-name').textContent=def.name+(rec?'（編集）':'');
+  document.getElementById('insp-date').value=rec?.date||today();
+  document.getElementById('insp-km').value=rec?rec.km:(car?.km||'');
+  document.getElementById('insp-cost').value=rec?.cost||'';
+  document.getElementById('insp-shop').value=rec?.shop||'';
+  document.getElementById('insp-note').value=rec?.note||'';
   renderChecklist();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-inspect').classList.add('active');
-  document.getElementById('header-title').textContent=def.name;
+  document.getElementById('header-title').textContent=def.name+(rec?'（編集）':'');
   document.getElementById('header-sub').textContent='各項目をタップして判定を記録';
   window.scrollTo(0,0);
 }
@@ -576,7 +576,7 @@ function saveInspection(){
   if(done===0){alert('少なくとも1項目は判定してください');return;}
   if(done<total&&!confirm(`未判定の項目が${total-done}件あります。このまま保存しますか？`))return;
   const rec={
-    id:Date.now().toString(36),
+    id:current.editId||Date.now().toString(36),
     type:current.type,
     date:document.getElementById('insp-date').value||today(),
     km:document.getElementById('insp-km').value,
@@ -585,12 +585,18 @@ function saveInspection(){
     note:document.getElementById('insp-note').value,
     states:{...states},
   };
-  records.push(rec);
+  if(current.editId){
+    const idx=records.findIndex(r=>r.id===current.editId);
+    if(idx>=0)records[idx]=rec;else records.push(rec);
+  }else{
+    records.push(rec);
+  }
   save('mrecords',records);
   // Update car km
   if(rec.km&&car){car.km=rec.km;save('mcar',car);}
+  const wasEdit=!!current.editId;
   current=null;
-  alert('点検記録を保存しました');
+  alert(wasEdit?'点検記録を更新しました':'点検記録を保存しました');
   go('history');
 }
 
@@ -644,10 +650,19 @@ function openDetail(id){
     }).filter(Boolean).join('');
     if(rows)html+=`<div style="font-size:13px;font-weight:700;margin:14px 0 4px">${sec.icon} ${sec.cat}</div>${rows}`;
   });
-  html+=`<div style="margin-top:20px"><button class="btn btn-danger" onclick="deleteRecord('${r.id}')">この記録を削除</button></div>`;
+  html+=`<div style="margin-top:20px" class="btn-row">
+    <button class="btn btn-primary" onclick="editRecord('${r.id}')">編集する</button>
+    <button class="btn btn-danger" onclick="deleteRecord('${r.id}')">削除</button>
+  </div>`;
   document.getElementById('detail-body').innerHTML=html;
   document.getElementById('sheet-overlay').classList.add('open');
   document.getElementById('detail-sheet').classList.add('open');
+}
+
+function editRecord(id){
+  const r=records.find(x=>x.id===id);if(!r)return;
+  closeSheet();
+  startInspection(r.type,r);
 }
 
 function deleteRecord(id){
